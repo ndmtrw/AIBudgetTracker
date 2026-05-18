@@ -6,15 +6,15 @@ function setupWebSocketServer(server) {
 
     wss.on("connection", (socket, request) => {
         const url = new URL(request.url, `http://${request.headers.host}`);
-        const userIdFromUrl = url.searchParams.get("userId");
+        const userId = url.searchParams.get("userId");
 
-        if (userIdFromUrl) {
-            realtimeService.addClient(userIdFromUrl, socket);
+        if (userId) {
+            realtimeService.addClient(userId, socket);
 
             socket.send(JSON.stringify({
                 type: "connection_success",
                 message: "WebSocket connected successfully.",
-                userId: userIdFromUrl
+                userId
             }));
         }
 
@@ -47,17 +47,15 @@ function setupWebSocketServer(server) {
         });
 
         socket.on("close", () => {
-            if (userIdFromUrl) {
-                realtimeService.removeClient(userIdFromUrl, socket);
-            }
+            realtimeService.removeSocket(socket);
         });
 
         socket.on("error", () => {
-            if (userIdFromUrl) {
-                realtimeService.removeClient(userIdFromUrl, socket);
-            }
+            realtimeService.removeSocket(socket);
         });
     });
+
+    console.log("WebSocket server is active");
 }
 
 module.exports = {
