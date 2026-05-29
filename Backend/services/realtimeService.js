@@ -53,8 +53,31 @@ function sendToUser(userId, payload) {
     return true;
 }
 
+function broadcast(payload) {
+    const message = JSON.stringify({
+        ...payload,
+        timestamp: new Date().toISOString()
+    });
+
+    for (const sockets of clients.values()) {
+        for (const socket of sockets) {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(message);
+            }
+        }
+    }
+}
+
 function getOnlineUsersCount() {
     return clients.size;
+}
+
+function isUserOnline(userId) {
+    return clients.has(userId);
+}
+
+function getConnectedUserIds() {
+    return Array.from(clients.keys());
 }
 
 module.exports = {
@@ -62,5 +85,8 @@ module.exports = {
     removeClient,
     removeSocket,
     sendToUser,
-    getOnlineUsersCount
+    broadcast,
+    getOnlineUsersCount,
+    isUserOnline,
+    getConnectedUserIds
 };
