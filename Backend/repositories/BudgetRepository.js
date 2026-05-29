@@ -16,7 +16,13 @@ function mapBudget(row) {
 }
 
 function getBudgetByUserAndMonth(userId, month) {
-    return mapBudget(db.prepare("SELECT * FROM budgets WHERE user_id = ? AND month = ?").get(userId, month));
+    return mapBudget(
+        db.prepare(`
+            SELECT *
+            FROM budgets
+            WHERE user_id = ? AND month = ?
+        `).get(userId, month)
+    );
 }
 
 function upsertBudget(budget) {
