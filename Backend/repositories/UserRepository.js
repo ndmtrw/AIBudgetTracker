@@ -19,8 +19,12 @@ function getAllUsers() {
     return db.prepare("SELECT * FROM users ORDER BY created_at ASC").all().map(mapUser);
 }
 
+function getUserById(id) {
+    return mapUser(db.prepare("SELECT * FROM users WHERE id = ?").get(id));
+}
+
 function findUserByEmail(email) {
-    return mapUser(db.prepare("SELECT * FROM users WHERE email = ?").get(email));
+    return mapUser(db.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)").get(email));
 }
 
 function createUser(user) {
@@ -36,7 +40,7 @@ function createUser(user) {
         user.createdAt
     );
 
-    return user;
+    return findUserByEmail(user.email);
 }
 
 function countUsers() {
@@ -45,6 +49,7 @@ function countUsers() {
 
 module.exports = {
     getAllUsers,
+    getUserById,
     findUserByEmail,
     createUser,
     countUsers
