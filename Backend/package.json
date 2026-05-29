@@ -1,7 +1,7 @@
 {
   "name": "ai-budget-tracker-backend",
   "version": "1.0.0",
-  "description": "Backend for AI Budget Tracker project",
+  "description": "Backend for AI Budget Tracker",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
