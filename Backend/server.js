@@ -6,10 +6,13 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 
-const { readData, writeData } = require("./services/fileService");
 const { calculateBudgetStatus, getBudgetWarning, getCurrentMonth } = require("./services/budgetService");
 const { getDashboardData } = require("./services/dashboardService");
 const { generateSavingSuggestions } = require("./services/aiService");
+const UserRepository = require("./repositories/UserRepository");
+const BudgetRepository = require("./repositories/BudgetRepository");
+const TransactionRepository = require("./repositories/TransactionRepository");
+const SuggestionRepository = require("./repositories/SuggestionRepository");
 
 const app = express();
 const server = http.createServer(app);
@@ -96,9 +99,7 @@ app.post("/api/auth/register", async (req, res) => {
         });
     }
 
-    const users = readData("users.json");
-
-    const existingUser = users.find(x => x.email === email);
+    const existingUser = UserRepository.findUserByEmail(email);
 
     if (existingUser) {
         return res.status(400).json({
@@ -108,17 +109,14 @@ app.post("/api/auth/register", async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const newUser = {
+    const newUser = UserRepository.createUser({
         id: uuidv4(),
         username,
         email,
         passwordHash,
-        role: users.length === 0 ? "admin" : "user",
+        role: UserRepository.countUsers() === 0 ? "admin" : "user",
         createdAt: new Date().toISOString()
-    };
-
-    users.push(newUser);
-    writeData("users.json", users);
+    });
 
     res.status(201).json({
         message: "User registered successfully.",
@@ -134,8 +132,7 @@ app.post("/api/auth/register", async (req, res) => {
 app.post("/api/auth/login", async (req, res) => {
     const { email, password } = req.body;
 
-    const users = readData("users.json");
-    const user = users.find(x => x.email === email);
+    const user = UserRepository.findUserByEmail(email);
 
     if (!user) {
         return res.status(400).json({
@@ -184,27 +181,16 @@ app.post("/api/budget", authMiddleware, (req, res) => {
         });
     }
 
-    const budgets = readData("budgets.json");
     const currentMonth = getCurrentMonth();
 
-    const existingBudget = budgets.find(x =>
-        x.userId === req.user.id &&
-        x.month === currentMonth
-    );
-
-    if (existingBudget) {
-        existingBudget.limit = Number(limit);
-    } else {
-        budgets.push({
-            id: uuidv4(),
-            userId: req.user.id,
-            month: currentMonth,
-            limit: Number(limit),
-            createdAt: new Date().toISOString()
-        });
-    }
-
-    writeData("budgets.json", budgets);
+    BudgetRepository.upsertBudget({
+        id: uuidv4(),
+        userId: req.user.id,
+        month: currentMonth,
+        limit: Number(limit),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    });
 
     res.json({
         message: "Monthly budget saved successfully.",
@@ -237,9 +223,7 @@ app.post("/api/transactions", authMiddleware, (req, res) => {
         });
     }
 
-    const transactions = readData("transactions.json");
-
-    const newTransaction = {
+    const newTransaction = TransactionRepository.createTransaction({
         id: uuidv4(),
         userId: req.user.id,
         type,
@@ -248,10 +232,7 @@ app.post("/api/transactions", authMiddleware, (req, res) => {
         description: description || "",
         date,
         createdAt: new Date().toISOString()
-    };
-
-    transactions.push(newTransaction);
-    writeData("transactions.json", transactions);
+    });
 
     if (type === "expense") {
         const budgetStatus = calculateBudgetStatus(req.user.id);
@@ -280,8 +261,7 @@ app.post("/api/transactions", authMiddleware, (req, res) => {
 app.get("/api/transactions", authMiddleware, (req, res) => {
     const { category, type, sortBy, order } = req.query;
 
-    let transactions = readData("transactions.json")
-        .filter(x => x.userId === req.user.id);
+    let transactions = TransactionRepository.getTransactionsByUser(req.user.id);
 
     if (category) {
         transactions = transactions.filter(x =>
@@ -312,14 +292,9 @@ app.put("/api/transactions/:id", authMiddleware, (req, res) => {
     const { id } = req.params;
     const { type, amount, category, description, date } = req.body;
 
-    const transactions = readData("transactions.json");
+    const existingTransaction = TransactionRepository.getTransactionByIdForUser(id, req.user.id);
 
-    const transaction = transactions.find(x =>
-        x.id === id &&
-        x.userId === req.user.id
-    );
-
-    if (!transaction) {
+    if (!existingTransaction) {
         return res.status(404).json({
             message: "Transaction not found."
         });
@@ -337,14 +312,13 @@ app.put("/api/transactions/:id", authMiddleware, (req, res) => {
         });
     }
 
-    transaction.type = type || transaction.type;
-    transaction.amount = amount !== undefined ? Number(amount) : transaction.amount;
-    transaction.category = category || transaction.category;
-    transaction.description = description !== undefined ? description : transaction.description;
-    transaction.date = date || transaction.date;
-    transaction.updatedAt = new Date().toISOString();
-
-    writeData("transactions.json", transactions);
+    const transaction = TransactionRepository.updateTransaction(id, req.user.id, {
+        type,
+        amount,
+        category,
+        description,
+        date
+    });
 
     const budgetStatus = calculateBudgetStatus(req.user.id);
     const warning = getBudgetWarning(budgetStatus);
@@ -365,24 +339,13 @@ app.put("/api/transactions/:id", authMiddleware, (req, res) => {
 app.delete("/api/transactions/:id", authMiddleware, (req, res) => {
     const { id } = req.params;
 
-    const transactions = readData("transactions.json");
+    const transactionDeleted = TransactionRepository.deleteTransaction(id, req.user.id);
 
-    const transactionExists = transactions.some(x =>
-        x.id === id &&
-        x.userId === req.user.id
-    );
-
-    if (!transactionExists) {
+    if (!transactionDeleted) {
         return res.status(404).json({
             message: "Transaction not found."
         });
     }
-
-    const filteredTransactions = transactions.filter(x =>
-        !(x.id === id && x.userId === req.user.id)
-    );
-
-    writeData("transactions.json", filteredTransactions);
 
     res.json({
         message: "Transaction deleted successfully."
@@ -420,42 +383,17 @@ app.post("/api/ai/suggestions", authMiddleware, (req, res) => {
 });
 
 app.get("/api/ai/suggestions", authMiddleware, (req, res) => {
-    const suggestions = readData("suggestions.json")
-        .filter(x => x.userId === req.user.id);
+    const suggestions = SuggestionRepository.getSuggestionsByUser(req.user.id);
 
     res.json(suggestions);
 });
 
 app.get("/api/admin/stats", authMiddleware, adminMiddleware, (req, res) => {
-    const users = readData("users.json");
-    const transactions = readData("transactions.json");
-    const suggestions = readData("suggestions.json");
-
-    const categoryCounter = {};
-
-    transactions.forEach(x => {
-        if (!categoryCounter[x.category]) {
-            categoryCounter[x.category] = 0;
-        }
-
-        categoryCounter[x.category]++;
-    });
-
-    let mostUsedCategory = null;
-    let highestCount = 0;
-
-    Object.entries(categoryCounter).forEach(([category, count]) => {
-        if (count > highestCount) {
-            mostUsedCategory = category;
-            highestCount = count;
-        }
-    });
-
     res.json({
-        totalUsers: users.length,
-        totalTransactions: transactions.length,
-        totalSuggestions: suggestions.length,
-        mostUsedCategory
+        totalUsers: UserRepository.countUsers(),
+        totalTransactions: TransactionRepository.countTransactions(),
+        totalSuggestions: SuggestionRepository.countSuggestions(),
+        mostUsedCategory: TransactionRepository.getMostUsedCategory()
     });
 });
 

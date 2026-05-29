@@ -1,8 +1,7 @@
-const { readData } = require("./fileService");
+const TransactionRepository = require("../repositories/TransactionRepository");
 
 function getDashboardData(userId) {
-    const transactions = readData("transactions.json")
-        .filter(x => x.userId === userId);
+    const transactions = TransactionRepository.getTransactionsByUser(userId);
 
     const totalIncome = transactions
         .filter(x => x.type === "income")
@@ -25,25 +24,23 @@ function getDashboardData(userId) {
         });
 
     let biggestSpendingCategory = null;
-    let biggestAmount = 0;
+    let biggestCategoryAmount = 0;
 
     Object.entries(expensesByCategory).forEach(([category, amount]) => {
-        if (amount > biggestAmount) {
+        if (amount > biggestCategoryAmount) {
             biggestSpendingCategory = category;
-            biggestAmount = amount;
+            biggestCategoryAmount = amount;
         }
     });
 
-    const recentTransactions = transactions
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
-        .slice(0, 5);
+    const recentTransactions = transactions.slice(0, 5);
 
     return {
         totalIncome,
         totalExpenses,
         balance: totalIncome - totalExpenses,
         biggestSpendingCategory,
-        biggestCategoryAmount: biggestAmount,
+        biggestCategoryAmount,
         expensesByCategory,
         recentTransactions
     };

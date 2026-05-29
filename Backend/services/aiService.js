@@ -1,11 +1,10 @@
-const { readData, writeData } = require("./fileService");
 const { v4: uuidv4 } = require("uuid");
+const TransactionRepository = require("../repositories/TransactionRepository");
+const SuggestionRepository = require("../repositories/SuggestionRepository");
 
 function generateSavingSuggestions(userId) {
-    const transactions = readData("transactions.json")
-        .filter(x => x.userId === userId && x.type === "expense");
-
-    const suggestions = readData("suggestions.json");
+    const transactions = TransactionRepository.getTransactionsByUser(userId)
+        .filter(x => x.type === "expense");
 
     const categoryTotals = {};
 
@@ -21,7 +20,6 @@ function generateSavingSuggestions(userId) {
 
     Object.entries(categoryTotals).forEach(([category, amount]) => {
         let text = "";
-
         const lowerCategory = category.toLowerCase();
 
         if (lowerCategory.includes("food") && amount > 300) {
@@ -46,8 +44,9 @@ function generateSavingSuggestions(userId) {
         }
     });
 
-    const allSuggestions = [...suggestions, ...generatedSuggestions];
-    writeData("suggestions.json", allSuggestions);
+    if (generatedSuggestions.length > 0) {
+        SuggestionRepository.createSuggestions(generatedSuggestions);
+    }
 
     return generatedSuggestions;
 }

@@ -16,3 +16,4 @@ const schema = fs.readFileSync(schemaPath, "utf-8");
 db.pragma("foreign_keys = ON");
 db.exec(schema);
 
+module.exports = db;

@@ -1,4 +1,5 @@
-const { readData } = require("./fileService");
+const BudgetRepository = require("../repositories/BudgetRepository");
+const TransactionRepository = require("../repositories/TransactionRepository");
 
 function getCurrentMonth() {
     const now = new Date();
@@ -6,12 +7,8 @@ function getCurrentMonth() {
 }
 
 function calculateBudgetStatus(userId) {
-    const budgets = readData("budgets.json");
-    const transactions = readData("transactions.json");
-
     const currentMonth = getCurrentMonth();
-
-    const budget = budgets.find(x => x.userId === userId && x.month === currentMonth);
+    const budget = BudgetRepository.getBudgetByUserAndMonth(userId, currentMonth);
 
     if (!budget) {
         return {
@@ -24,12 +21,8 @@ function calculateBudgetStatus(userId) {
         };
     }
 
-    const monthlyExpenses = transactions
-        .filter(x =>
-            x.userId === userId &&
-            x.type === "expense" &&
-            x.date.startsWith(currentMonth)
-        )
+    const monthlyExpenses = TransactionRepository.getTransactionsByUser(userId)
+        .filter(x => x.type === "expense" && x.date.startsWith(currentMonth))
         .reduce((sum, x) => sum + Number(x.amount), 0);
 
     const percentageUsed = budget.limit > 0
